@@ -1,47 +1,16 @@
-<script setup lang="ts">
+<script lang="ts" setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 
-type UpdateState = 'checking' | 'available' | 'downloading' | 'ready' | 'idle'
-
-const updateState = ref<UpdateState>('idle')
 const newVersion = ref('')
-const downloadProgress = ref(0)
 const showNotification = ref(false)
 
 let cleanupAvailable: (() => void) | null = null
-let cleanupProgress: (() => void) | null = null
-let cleanupDownloaded: (() => void) | null = null
 
-async function handleDownload() {
-  try {
-    updateState.value = 'downloading'
-    console.log('Starting update download...')
-    const result = await window.api.update.download()
-    if (!result?.success) {
-      console.error('Failed to start download:', result?.error)
-      alert('Failed to start download. Please try again.')
-      updateState.value = 'available'
-    }
-  } catch (error) {
-    console.error('Error downloading update:', error)
-    alert('Failed to start download. Please try again.')
-    updateState.value = 'available'
-  }
-}
-
-async function handleInstall() {
-  try {
-    console.log('Requesting app restart and update installation...')
-    const result = await window.api.update.install()
-    if (!result?.success) {
-      console.error('Failed to install update:', result?.error)
-      alert('Failed to install update. Please try again or restart the app manually.')
-    }
-  } catch (error) {
-    console.error('Error installing update:', error)
-    alert('Failed to install update. Please try again or restart the app manually.')
-  }
+function handleOpenGitHub() {
+  const url = `https://github.com/vuthanhbayit/o-ai/releases/tag/v${newVersion.value}`
+  console.log('Opening GitHub releases:', url)
+  window.open(url, '_blank')
 }
 
 function handleDismiss() {
@@ -52,26 +21,12 @@ function setupUpdateListeners() {
   cleanupAvailable = window.api.update.onAvailable((info) => {
     console.log('Update available:', info.version)
     newVersion.value = info.version
-    updateState.value = 'available'
     showNotification.value = true
-  })
-
-  cleanupProgress = window.api.update.onDownloadProgress((progress) => {
-    console.log('Download progress:', progress.percent)
-    downloadProgress.value = Math.round(progress.percent)
-  })
-
-  cleanupDownloaded = window.api.update.onDownloaded((info) => {
-    console.log('Update downloaded:', info.version)
-    updateState.value = 'ready'
-    downloadProgress.value = 100
   })
 }
 
 function cleanupListeners() {
   cleanupAvailable?.()
-  cleanupProgress?.()
-  cleanupDownloaded?.()
 }
 
 onMounted(() => {
@@ -103,30 +58,10 @@ onUnmounted(() => {
           <div class="flex items-center justify-between px-4 py-3 border-b border-gray-700">
             <div class="flex items-center gap-3">
               <div class="p-2 rounded-full bg-blue-900/50">
-                <Icon
-                  :icon="
-                    updateState === 'downloading'
-                      ? 'lucide:download'
-                      : updateState === 'ready'
-                        ? 'lucide:check-circle'
-                        : 'lucide:arrow-up-circle'
-                  "
-                  :class="[
-                    'w-5 h-5',
-                    updateState === 'ready' ? 'text-green-400' : 'text-blue-400'
-                  ]"
-                />
+                <Icon class="w-5 h-5 text-blue-400" icon="lucide:arrow-up-circle" />
               </div>
               <div>
-                <h3 class="text-sm font-semibold text-white">
-                  {{
-                    updateState === 'downloading'
-                      ? 'Downloading Update'
-                      : updateState === 'ready'
-                        ? 'Update Ready'
-                        : 'Update Available'
-                  }}
-                </h3>
+                <h3 class="text-sm font-semibold text-white">Update Available</h3>
                 <p class="text-xs text-gray-400">Version {{ newVersion }}</p>
               </div>
             </div>
@@ -134,65 +69,34 @@ onUnmounted(() => {
               class="p-1 hover:bg-gray-700 rounded transition-colors"
               @click="handleDismiss"
             >
-              <Icon icon="lucide:x" class="w-4 h-4 text-gray-400" />
+              <Icon class="w-4 h-4 text-gray-400" icon="lucide:x" />
             </button>
           </div>
 
           <!-- Content -->
           <div class="px-4 py-3">
-            <!-- Available State -->
-            <p v-if="updateState === 'available'" class="text-sm text-gray-300">
-              A new version is available. Download now to get the latest features and improvements.
-            </p>
-
-            <!-- Downloading State -->
-            <div v-else-if="updateState === 'downloading'" class="space-y-2">
-              <p class="text-sm text-gray-300">Downloading update...</p>
-              <div class="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
-                <div
-                  class="bg-blue-500 h-full transition-all duration-300 ease-out"
-                  :style="{ width: `${downloadProgress}%` }"
-                ></div>
-              </div>
-              <p class="text-xs text-gray-400 text-right">{{ downloadProgress }}%</p>
+            <div class="space-y-2">
+              <p class="text-sm text-gray-300">A new version is available!</p>
+              <p class="text-xs text-gray-400">
+                Click below to download the latest release from GitHub.
+              </p>
             </div>
-
-            <!-- Ready State -->
-            <p v-else-if="updateState === 'ready'" class="text-sm text-gray-300">
-              Update downloaded successfully. Restart the app to install.
-            </p>
           </div>
 
           <!-- Actions -->
           <div class="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-700">
             <button
-              v-if="updateState === 'available'"
               class="px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-700 rounded transition-colors"
               @click="handleDismiss"
             >
               Later
             </button>
             <button
-              v-if="updateState === 'available'"
-              class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors"
-              @click="handleDownload"
+              class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors flex items-center gap-2"
+              @click="handleOpenGitHub"
             >
-              Download
-            </button>
-
-            <button
-              v-if="updateState === 'ready'"
-              class="px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-700 rounded transition-colors"
-              @click="handleDismiss"
-            >
-              Later
-            </button>
-            <button
-              v-if="updateState === 'ready'"
-              class="px-4 py-2 text-sm bg-green-600 hover:bg-green-500 text-white rounded transition-colors"
-              @click="handleInstall"
-            >
-              Restart & Install
+              <Icon class="w-4 h-4" icon="lucide:external-link" />
+              Download from GitHub
             </button>
           </div>
         </div>

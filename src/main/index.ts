@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, globalShortcut } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, globalShortcut, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
@@ -143,6 +143,88 @@ function registerIpcHandlers(): void {
   })
 }
 
+function createApplicationMenu(): void {
+  const isMac = process.platform === 'darwin'
+
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(isMac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: 'about' as const },
+              { type: 'separator' as const },
+              { role: 'services' as const },
+              { type: 'separator' as const },
+              { role: 'hide' as const },
+              { role: 'hideOthers' as const },
+              { role: 'unhide' as const },
+              { type: 'separator' as const },
+              { role: 'quit' as const }
+            ]
+          }
+        ]
+      : []),
+    {
+      label: 'File',
+      submenu: [isMac ? { role: 'close' as const } : { role: 'quit' as const }]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' as const },
+        { role: 'redo' as const },
+        { type: 'separator' as const },
+        { role: 'cut' as const },
+        { role: 'copy' as const },
+        { role: 'paste' as const },
+        ...(isMac
+          ? [
+              { role: 'pasteAndMatchStyle' as const },
+              { role: 'delete' as const },
+              { role: 'selectAll' as const }
+            ]
+          : [{ role: 'delete' as const }, { type: 'separator' as const }, { role: 'selectAll' as const }])
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' as const },
+        { role: 'forceReload' as const },
+        {
+          label: 'Toggle Developer Tools',
+          accelerator: isMac ? 'Alt+Command+I' : 'Ctrl+Shift+I',
+          click: () => {
+            console.log('[Menu] Toggle DevTools clicked')
+            mainWindow?.webContents.toggleDevTools()
+          }
+        },
+        { type: 'separator' as const },
+        { role: 'resetZoom' as const },
+        { role: 'zoomIn' as const },
+        { role: 'zoomOut' as const },
+        { type: 'separator' as const },
+        { role: 'togglefullscreen' as const }
+      ]
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' as const },
+        { role: 'zoom' as const },
+        ...(isMac
+          ? [{ type: 'separator' as const }, { role: 'front' as const }, { type: 'separator' as const }, { role: 'window' as const }]
+          : [{ role: 'close' as const }])
+      ]
+    }
+  ]
+
+  const menu = Menu.buildFromTemplate(template)
+  Menu.setApplicationMenu(menu)
+  console.log('[Menu] Application menu created')
+}
+
 function registerGlobalShortcuts(): void {
   if (mainWindow) {
     mainWindow.webContents.on('before-input-event', (_event, input) => {
@@ -166,14 +248,26 @@ function registerGlobalShortcuts(): void {
 }
 
 function setupAutoUpdater(): void {
+  // Enable detailed logging
+  autoUpdater.logger = console
+
   // Disable auto-download to show user notification first
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
 
+  console.log('[AutoUpdater] Setup started')
+  console.log('[AutoUpdater] Current version:', app.getVersion())
+  console.log('[AutoUpdater] Platform:', process.platform)
+  console.log('[AutoUpdater] isDev:', is.dev)
+  console.log('[AutoUpdater] Download path:', app.getPath('userData'))
+
   // Check for updates on app start (after 3 seconds)
   setTimeout(() => {
     if (!is.dev) {
+      console.log('[AutoUpdater] Checking for updates...')
       autoUpdater.checkForUpdates()
+    } else {
+      console.log('[AutoUpdater] Skipping update check in dev mode')
     }
   }, 3000)
 
@@ -181,31 +275,40 @@ function setupAutoUpdater(): void {
   setInterval(
     () => {
       if (!is.dev) {
+        console.log('[AutoUpdater] Periodic update check...')
         autoUpdater.checkForUpdates()
       }
     },
     30 * 60 * 1000
   )
 
+  autoUpdater.on('checking-for-update', () => {
+    console.log('[AutoUpdater] Checking for update...')
+  })
+
   autoUpdater.on('update-available', (info) => {
-    console.log('Update available:', info.version)
+    console.log('[AutoUpdater] Update available:', JSON.stringify(info, null, 2))
     mainWindow?.webContents.send('update-available', info)
   })
 
-  autoUpdater.on('update-not-available', () => {
-    console.log('No updates available')
+  autoUpdater.on('update-not-available', (info) => {
+    console.log('[AutoUpdater] Update not available:', JSON.stringify(info, null, 2))
   })
 
   autoUpdater.on('error', (err) => {
-    console.error('Update error:', err)
+    console.error('[AutoUpdater] Error:', err)
+    console.error('[AutoUpdater] Error stack:', err.stack)
   })
 
   autoUpdater.on('download-progress', (progressObj) => {
+    console.log(
+      `[AutoUpdater] Download progress: ${progressObj.percent.toFixed(2)}% (${progressObj.transferred}/${progressObj.total})`
+    )
     mainWindow?.webContents.send('update-download-progress', progressObj)
   })
 
   autoUpdater.on('update-downloaded', (info) => {
-    console.log('Update downloaded:', info.version)
+    console.log('[AutoUpdater] Update downloaded:', JSON.stringify(info, null, 2))
     mainWindow?.webContents.send('update-downloaded', info)
   })
 
@@ -225,16 +328,37 @@ function setupAutoUpdater(): void {
   // Handle install update request from renderer
   ipcMain.handle('update:install', async () => {
     try {
-      console.log('Installing update and restarting app...')
+      console.log('[AutoUpdater] Install requested from renderer')
+      console.log('[AutoUpdater] autoInstallOnAppQuit:', autoUpdater.autoInstallOnAppQuit)
+
       // Set quitting flag to prevent cleanup issues
       isQuitting = true
-      // Quit and install: isSilent=false (show), isForceRunAfter=true (force run)
-      setImmediate(() => {
-        autoUpdater.quitAndInstall(false, true)
-      })
+
+      // For unsigned apps on macOS, we need to manually handle the update
+      // The update file is already downloaded, we need to:
+      // 1. Close the app gracefully (not force exit)
+      // 2. Let electron-updater's autoInstallOnAppQuit handle it
+      // 3. If that doesn't work, provide manual instructions
+
+      console.log('[AutoUpdater] Attempting graceful quit for auto-install...')
+
+      setTimeout(() => {
+        // Close all windows
+        const windows = BrowserWindow.getAllWindows()
+        console.log('[AutoUpdater] Closing', windows.length, 'window(s)')
+        windows.forEach((win) => win.close())
+
+        // Use app.quit() instead of app.exit() to trigger autoInstallOnAppQuit
+        setTimeout(() => {
+          console.log('[AutoUpdater] Calling app.quit() to trigger autoInstallOnAppQuit')
+          app.quit()
+        }, 200)
+      }, 100)
+
       return { success: true }
     } catch (error) {
-      console.error('Failed to install update:', error)
+      console.error('[AutoUpdater] Failed to install update:', error)
+      console.error('[AutoUpdater] Error stack:', error instanceof Error ? error.stack : 'N/A')
       isQuitting = false
       return { success: false, error: String(error) }
     }
@@ -249,6 +373,7 @@ app.whenReady().then(() => {
   })
 
   registerIpcHandlers()
+  createApplicationMenu()
   createWindow()
   registerGlobalShortcuts()
   setupAutoUpdater()
@@ -260,20 +385,24 @@ app.whenReady().then(() => {
 
 // Handle before-quit to set flag and cleanup
 app.on('before-quit', () => {
+  console.log('[App] before-quit event fired')
   isQuitting = true
   invalidateWindowReferences()
   closeAllPty()
 })
 
 app.on('window-all-closed', () => {
+  console.log('[App] window-all-closed event fired')
   invalidateWindowReferences()
   closeAllPty()
   if (process.platform !== 'darwin') {
+    console.log('[App] Quitting app (non-macOS)')
     app.quit()
   }
 })
 
 app.on('will-quit', () => {
+  console.log('[App] will-quit event fired')
   globalShortcut.unregisterAll()
   closeAllPty()
 })

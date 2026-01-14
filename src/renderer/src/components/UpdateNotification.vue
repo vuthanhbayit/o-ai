@@ -18,8 +18,18 @@ function handleDownload() {
   window.api.update.download()
 }
 
-function handleInstall() {
-  window.api.update.install()
+async function handleInstall() {
+  try {
+    console.log('Requesting app restart and update installation...')
+    const result = await window.api.update.install()
+    if (!result?.success) {
+      console.error('Failed to install update:', result?.error)
+      alert('Failed to install update. Please try again or restart the app manually.')
+    }
+  } catch (error) {
+    console.error('Error installing update:', error)
+    alert('Failed to install update. Please try again or restart the app manually.')
+  }
 }
 
 function handleDismiss() {

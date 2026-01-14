@@ -210,13 +210,34 @@ function setupAutoUpdater(): void {
   })
 
   // Handle download update request from renderer
-  ipcMain.handle('update:download', () => {
-    autoUpdater.downloadUpdate()
+  ipcMain.handle('update:download', async () => {
+    try {
+      console.log('Starting update download...')
+      await autoUpdater.downloadUpdate()
+      console.log('Update download initiated successfully')
+      return { success: true }
+    } catch (error) {
+      console.error('Failed to download update:', error)
+      return { success: false, error: String(error) }
+    }
   })
 
   // Handle install update request from renderer
-  ipcMain.handle('update:install', () => {
-    autoUpdater.quitAndInstall(false, true)
+  ipcMain.handle('update:install', async () => {
+    try {
+      console.log('Installing update and restarting app...')
+      // Set quitting flag to prevent cleanup issues
+      isQuitting = true
+      // Quit and install: isSilent=false (show), isForceRunAfter=true (force run)
+      setImmediate(() => {
+        autoUpdater.quitAndInstall(false, true)
+      })
+      return { success: true }
+    } catch (error) {
+      console.error('Failed to install update:', error)
+      isQuitting = false
+      return { success: false, error: String(error) }
+    }
   })
 }
 

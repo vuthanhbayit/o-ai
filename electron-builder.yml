@@ -49,6 +49,6 @@ appImage:
 npmRebuild: false
 publish:
   provider: github
-  owner: Onward-Together
-  repo: claude-workspace-app
+  owner: vuthanhbayit
+  repo: o-ai
   releaseType: release

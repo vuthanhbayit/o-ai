@@ -58,8 +58,8 @@ export interface Api {
     switchTab: (callback: (index: number) => void) => () => void
   }
   update: {
-    download: () => Promise<void>
-    install: () => Promise<void>
+    download: () => Promise<{ success: boolean; error?: string }>
+    install: () => Promise<{ success: boolean; error?: string }>
     onAvailable: (callback: (info: { version: string }) => void) => () => void
     onDownloadProgress: (
       callback: (progress: { percent: number; transferred: number; total: number }) => void

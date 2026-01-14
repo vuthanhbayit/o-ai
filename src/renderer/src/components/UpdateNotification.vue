@@ -13,9 +13,21 @@ let cleanupAvailable: (() => void) | null = null
 let cleanupProgress: (() => void) | null = null
 let cleanupDownloaded: (() => void) | null = null
 
-function handleDownload() {
-  updateState.value = 'downloading'
-  window.api.update.download()
+async function handleDownload() {
+  try {
+    updateState.value = 'downloading'
+    console.log('Starting update download...')
+    const result = await window.api.update.download()
+    if (!result?.success) {
+      console.error('Failed to start download:', result?.error)
+      alert('Failed to start download. Please try again.')
+      updateState.value = 'available'
+    }
+  } catch (error) {
+    console.error('Error downloading update:', error)
+    alert('Failed to start download. Please try again.')
+    updateState.value = 'available'
+  }
 }
 
 async function handleInstall() {
